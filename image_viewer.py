@@ -480,13 +480,13 @@ def display_image(np_image):
     # Define top buttons
     top_buttons = [
         sg.Button('Load Image', size=(12,1)),
+        sg.Button('Undo', size=(8,1)),
         sg.Button('Reset Image', size=(12,1)),
-        sg.Button('Exit', size=(12,1)),
-        sg.Button('Object Removal', size=(14,1)),
         sg.Button('Resize Image', size=(12,1)),
+        sg.Button('Object Removal', size=(14,1)),
         sg.Button('Panorama', size=(12,1)),
         sg.Button('Save Image', size=(12,1)),
-        sg.Button('Undo', size=(12,1))
+        sg.Button('Exit', size=(8,1))
     ]
 
     # Left column with scrollable adjustments
@@ -520,7 +520,7 @@ def display_image(np_image):
             [sg.Slider(range=(1,20), default_value=5, orientation='h', size=(20,20), key='-BRUSH-')],
             [sg.Button('Clear Selection', size=(20,1))]
         ], pad=(10,10))]
-    ], element_justification='left', scrollable=True, vertical_scroll_only=True, size=(300, 600))
+    ], element_justification='left', scrollable=True, vertical_scroll_only=True, expand_y=True)
 
     # Layout adjustment: Canvas on the left, adjustments on the right
     layout = [
@@ -545,9 +545,28 @@ def display_image(np_image):
         event, values = window.read()
         if event == sg.WINDOW_CLOSED or event == 'Exit':
             break
+        elif event == 'Resize Image':
+            resized_image = resize_image(edited_image)
+            if resized_image is not None:
+                edited_image = resized_image
+                # Reset original image and history with resized image
+                original_image = resized_image.copy()
+                history = [edited_image.copy()]
+                image_data = np_im_to_data(edited_image)
+                # Update graph size
+                height, width, _ = edited_image.shape
+                graph.change_coordinates((0, height), (width, 0))
+                graph.Widget.config(width=width, height=height)
+                graph.erase()
+                graph.draw_image(data=image_data, location=(0, 0))
+                # Adjust window size
+                window_size = window.size
+                new_window_height = max(height + 100, window_size[1])  # Adding some padding
+                new_window_width = width + 350  # Assuming left_column width is about 350
+                window.size = (new_window_width, new_window_height)
         elif event == 'Load Image':
             # Load a new image
-            filename = sg.popup_get_file('Select an image file', file_types=(("Image Files", "*.png;*.jpg;*.jpeg"),))
+            filename = sg.popup_get_file('Select an image file', file_types=(("All Files", "*.*"),))
             if filename:
                 image = cv2.imread(filename)
                 if image is None:
