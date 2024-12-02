@@ -20,8 +20,31 @@ def adjust_brightness_contrast(image, brightness=0, contrast=0):
     """
     Adjust brightness and contrast of the image.
     """
-    adjusted = cv2.convertScaleAbs(image, alpha=1 + contrast / 100.0, beta=brightness)
-    return adjusted
+    brightness = int(brightness)
+    contrast = int(contrast)
+
+    if brightness != 0:
+        if brightness > 0:
+            shadow = brightness
+            highlight = 255
+        else:
+            shadow = 0
+            highlight = 255 + brightness
+        alpha_b = (highlight - shadow) / 255
+        gamma_b = shadow
+        img_b = cv2.addWeighted(image, alpha_b, image, 0, gamma_b)
+    else:
+        img_b = image.copy()
+
+    if contrast != 0:
+        f = 131 * (contrast + 127) / (127 * (131 - contrast))
+        alpha_c = f
+        gamma_c = 127 * (1 - f)
+        img_bc = cv2.addWeighted(img_b, alpha_c, img_b, 0, gamma_c)
+    else:
+        img_bc = img_b.copy()
+
+    return img_bc
 
 def adjust_color_temperature(image, temp_value):
     """
@@ -64,14 +87,28 @@ def blur_image(image, amount=1):
     blurred = cv2.GaussianBlur(image, (ksize, ksize), 0)
     return blurred
 
+def add_noise(image, noise_intensity=0):
+    """
+    Add Gaussian noise to the image.
+    noise_intensity: 0 (no noise) to 100 (maximum noise)
+    """
+    if noise_intensity == 0:
+        return image
+    noise_sigma = noise_intensity * (50 / 100)  # Map 0-100 to 0-50 standard deviation
+    noise = np.random.normal(0, noise_sigma, image.shape).astype(np.float32)
+    noisy_image = image.astype(np.float32) + noise
+    noisy_image = np.clip(noisy_image, 0, 255).astype(np.uint8)
+    return noisy_image
+
 def apply_filter(image, filter_type):
     """
     Apply a selected filter to the image.
     """
     if filter_type == 'Sepia':
-        filtered = cv2.transform(image, np.matrix([[0.272, 0.534, 0.131],
-                                                   [0.349, 0.686, 0.168],
-                                                   [0.393, 0.769, 0.189]]))
+        sepia_filter = np.array([[0.393, 0.769, 0.189],
+                                 [0.349, 0.686, 0.168],
+                                 [0.272, 0.534, 0.131]])
+        filtered = cv2.transform(image, sepia_filter)
     elif filter_type == 'Black and White':
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         filtered = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
@@ -81,6 +118,20 @@ def apply_filter(image, filter_type):
         filtered = oil_painting_2_filter(image)
     elif filter_type == 'Film Effect':
         filtered = film_effect(image)
+    elif filter_type == 'Pencil Sketch':
+        filtered = pencil_sketch_filter(image)
+    elif filter_type == 'Cartoon':
+        filtered = cartoon_filter(image)
+    elif filter_type == 'Watercolor':
+        filtered = watercolor_filter(image)
+    elif filter_type == 'Edge Detection':
+        filtered = edge_detection_filter(image)
+    elif filter_type == 'Stylization':
+        filtered = stylization_filter(image)
+    elif filter_type == 'Detail Enhance':
+        filtered = detail_enhance_filter(image)
+    elif filter_type == 'Color Map':
+        filtered = color_map_filter(image)
     else:
         filtered = image
     filtered = np.clip(filtered, 0, 255).astype(np.uint8)
@@ -95,13 +146,14 @@ def oil_painting_2_filter(image):
     processed_image = clip_strokes(processed_image, edges)
     return processed_image
 
-def film_effect(image):
+def film_effect(image, noise_intensity=10):
     """
-    Apply a film effect to the image.
+    Apply a film effect to the image with adjustable noise intensity.
     """
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-    noise = np.random.normal(0, 10, image.shape[:2])
+    noise_sigma = noise_intensity  # Adjust the noise intensity
+    noise = np.random.normal(0, noise_sigma, image.shape[:2])
     noisy_image = blurred + noise
     noisy_image = np.clip(noisy_image, 0, 255).astype(np.uint8)
     filtered = cv2.cvtColor(noisy_image, cv2.COLOR_GRAY2RGB)
@@ -149,12 +201,119 @@ def clip_strokes(image, edge_pixels):
                 output_image[y, x] = image[y, x]
     return output_image
 
+def pencil_sketch_filter(image):
+    """
+    Apply a pencil sketch filter to the image.
+    """
+    gray_image, color_sketch = cv2.pencilSketch(image, sigma_s=60, sigma_r=0.07, shade_factor=0.05)
+    sketch_rgb = cv2.cvtColor(gray_image, cv2.COLOR_GRAY2RGB)
+    return sketch_rgb
+
+def cartoon_filter(image):
+    """
+    Apply a cartoon filter to the image.
+    """
+    num_down = 2  # Number of downsampling steps
+    num_bilateral = 7  # Number of bilateral filtering steps
+
+    # Downsample image using Gaussian pyramid
+    img_color = image.copy()
+    for _ in range(num_down):
+        img_color = cv2.pyrDown(img_color)
+
+    # Repeatedly apply small bilateral filter instead of applying one large filter
+    for _ in range(num_bilateral):
+        img_color = cv2.bilateralFilter(img_color, d=9, sigmaColor=9, sigmaSpace=7)
+
+    # Upsample image to original size
+    for _ in range(num_down):
+        img_color = cv2.pyrUp(img_color)
+    img_color = cv2.resize(img_color, (image.shape[1], image.shape[0]))
+
+    # Convert to grayscale and apply median blur
+    img_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    img_blur = cv2.medianBlur(img_gray, 7)
+
+    # Detect edges and threshold
+    img_edge = cv2.adaptiveThreshold(img_blur, 255,
+                                     cv2.ADAPTIVE_THRESH_MEAN_C,
+                                     cv2.THRESH_BINARY,
+                                     blockSize=9,
+                                     C=2)
+
+    # Convert back to color
+    img_edge = cv2.cvtColor(img_edge, cv2.COLOR_GRAY2RGB)
+
+    # Combine color image with edge mask
+    cartoon = cv2.bitwise_and(img_color, img_edge)
+    return cartoon
+
+def watercolor_filter(image):
+    """
+    Apply a watercolor filter to the image.
+    """
+    img_color = cv2.edgePreservingFilter(image, flags=1, sigma_s=60, sigma_r=0.6)
+    img_blur = cv2.bilateralFilter(img_color, d=9, sigmaColor=75, sigmaSpace=75)
+    return img_blur
+
+def edge_detection_filter(image):
+    """
+    Apply edge detection filter to the image.
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    edges = cv2.Canny(gray, threshold1=50, threshold2=150)
+    edges_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
+    return edges_rgb
+
+def stylization_filter(image):
+    """
+    Apply stylization filter to the image.
+    """
+    stylized_image = cv2.stylization(image, sigma_s=60, sigma_r=0.07)
+    return stylized_image
+
+def detail_enhance_filter(image):
+    """
+    Apply detail enhancement filter to the image.
+    """
+    enhanced_image = cv2.detailEnhance(image, sigma_s=10, sigma_r=0.15)
+    return enhanced_image
+
+def color_map_filter(image):
+    """
+    Apply color map filter to the image.
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    color_mapped_image = cv2.applyColorMap(gray, cv2.COLORMAP_JET)
+    return color_mapped_image
+
 def remove_object(image, mask):
     """
     Remove an object from the image using a mask.
     """
-    inpainted = cv2.inpaint(image, mask, 3, cv2.INPAINT_TELEA)
-    return inpainted
+    layout = [
+        [sg.Text('Select Inpainting Method')],
+        [sg.Radio('Telea', 'METHOD', default=True, key='-TELEA-'),
+         sg.Radio('Navier-Stokes', 'METHOD', key='-NS-')],
+        [sg.Text('Inpainting Radius')],
+        [sg.Slider(range=(1, 20), default_value=3, orientation='h', key='-RADIUS-')],
+        [sg.Button('Inpaint'), sg.Button('Cancel')]
+    ]
+    window = sg.Window('Inpainting Options', layout)
+    while True:
+        event, values = window.read()
+        if event in (sg.WINDOW_CLOSED, 'Cancel'):
+            window.close()
+            return image
+        elif event == 'Inpaint':
+            radius = int(values['-RADIUS-'])
+            method = 'telea' if values['-TELEA-'] else 'ns'
+            if method == 'telea':
+                inpainted = cv2.inpaint(image, mask, radius, cv2.INPAINT_TELEA)
+            else:
+                inpainted = cv2.inpaint(image, mask, radius, cv2.INPAINT_NS)
+            window.close()
+            return inpainted
 
 def create_panorama():
     """
@@ -162,10 +321,8 @@ def create_panorama():
     """
     layout = [
         [sg.Text('Select images for panorama')],
-        # [sg.Input(key='-FILES-'),
-        #  sg.FilesBrowse(file_types=(("Image Files", "*.png;*.jpg;*.jpeg"),("All Files", "*.*"),))],
         [sg.Input(key='-FILES-'),
-         sg.FilesBrowse(file_types=(("All Files", "*.*"),))],
+         sg.FilesBrowse(file_types=(("Image Files", "*.png;*.jpg;*.jpeg"),))],
         [sg.Button('Create Panorama'), sg.Button('Cancel')]
     ]
     window = sg.Window('Panorama Creation', layout)
@@ -234,7 +391,6 @@ def create_panorama():
             window.close()
             break
 
-
 def resize_image(image):
     """
     Resize the image with different interpolation methods and aspect ratio option.
@@ -276,6 +432,8 @@ def resize_image(image):
                 return resized_image
             except ValueError:
                 sg.popup('Please enter valid dimensions.')
+            except ZeroDivisionError:
+                sg.popup('Width and Height must be greater than zero.')
         elif event == '-WIDTH-':
             if values['-ASPECT-']:
                 try:
@@ -319,53 +477,62 @@ def display_image(np_image):
         motion_events=True
     )
 
-    # Adjusted the layout to make all options in 'Selection Tools' visible
-    layout = [
-        [sg.Column([
-            [graph]
-        ], element_justification='center'),
-        sg.VSeparator(),
-        sg.Column([
-            [sg.Frame('Adjustments', [
-                [sg.Text('Brightness')],
-                [sg.Slider(range=(-100,100), default_value=0, orientation='h', size=(20,20), key='-BRIGHTNESS-')],
-                [sg.Text('Contrast')],
-                [sg.Slider(range=(-100,100), default_value=0, orientation='h', size=(20,20), key='-CONTRAST-')],
-                [sg.Text('Sharpen Amount')],
-                [sg.Slider(range=(1,100), default_value=1, orientation='h', size=(20,20), key='-SHARPEN-')],
-                [sg.Text('Blur Amount')],
-                [sg.Slider(range=(0,10), default_value=0, orientation='h', size=(20,20), key='-BLUR-')],
-                [sg.Text('Color Temperature')],
-                [sg.Slider(range=(-100, 100), default_value=0, orientation='h', size=(20,20), key='-TEMP-')],
-                [sg.Button('Apply Adjustments', size=(20,1))]
-            ], pad=(10,10))],
-            [sg.Frame('Filters', [
-                [sg.Text('Select Filter')],
-                [sg.Combo(['None', 'Sepia', 'Black and White', 'Oil Painting', 'Oil Painting 2', 'Film Effect'], default_value='None', key='-FILTER-')],
-                [sg.Button('Apply Filter', size=(20,1))]
-            ], pad=(10,10))],
-            [sg.Frame('Selection Tools', [
-                [sg.Text('Selection Shape:')],
-                [sg.Radio('Rectangle', 'SHAPE', default=True, key='-RECT-')],
-                [sg.Radio('Circle', 'SHAPE', key='-CIRCLE-')],
-                [sg.Radio('Freehand', 'SHAPE', key='-FREEHAND-')],
-                [sg.Text('Brush Size')],
-                [sg.Slider(range=(1,20), default_value=5, orientation='h', size=(20,20), key='-BRUSH-')],
-                [sg.Button('Clear Selection', size=(20,1))]
-            ], pad=(10,10))],
-            [sg.Frame('Other Functions', [
-                [sg.Button('Object Removal', size=(20,1))],
-                [sg.Button('Resize Image', size=(20,1))],
-                [sg.Button('Panorama', size=(20,1))],
-                [sg.Button('Save Image', size=(20,1))],
-                [sg.Button('Undo', size=(20,1))]
-            ], pad=(10,10))],
-            [sg.Button('Reset Image', size=(20,1))],
-            [sg.Button('Exit', size=(20,1))]
-        ], element_justification='left', scrollable=True, vertical_scroll_only=True, size=(300, 600))]
+    # Define top buttons
+    top_buttons = [
+        sg.Button('Load Image', size=(12,1)),
+        sg.Button('Reset Image', size=(12,1)),
+        sg.Button('Exit', size=(12,1)),
+        sg.Button('Object Removal', size=(14,1)),
+        sg.Button('Resize Image', size=(12,1)),
+        sg.Button('Panorama', size=(12,1)),
+        sg.Button('Save Image', size=(12,1)),
+        sg.Button('Undo', size=(12,1))
     ]
 
-    window = sg.Window('Image Editor', layout, finalize=True)
+    # Left column with scrollable adjustments
+    left_column = sg.Column([
+        [sg.Frame('Adjustments', [
+            [sg.Text('Brightness')],
+            [sg.Slider(range=(-100,100), default_value=0, orientation='h', size=(20,20), key='-BRIGHTNESS-')],
+            [sg.Text('Contrast')],
+            [sg.Slider(range=(-100,100), default_value=0, orientation='h', size=(20,20), key='-CONTRAST-')],
+            [sg.Text('Sharpen Amount')],
+            [sg.Slider(range=(1,100), default_value=1, orientation='h', size=(20,20), key='-SHARPEN-')],
+            [sg.Text('Blur Amount')],
+            [sg.Slider(range=(0,10), default_value=0, orientation='h', size=(20,20), key='-BLUR-')],
+            [sg.Text('Color Temperature')],
+            [sg.Slider(range=(-100, 100), default_value=0, orientation='h', size=(20,20), key='-TEMP-')],
+            [sg.Text('Noise Intensity')],
+            [sg.Slider(range=(0,100), default_value=0, orientation='h', size=(20,20), key='-NOISE-')],
+            [sg.Button('Apply Adjustments', size=(20,1))]
+        ], pad=(10,10))],
+        [sg.Frame('Filters', [
+            [sg.Text('Select Filter')],
+            [sg.Combo(['None', 'Sepia', 'Black and White', 'Oil Painting', 'Oil Painting 2', 'Film Effect', 'Pencil Sketch', 'Cartoon', 'Watercolor', 'Edge Detection', 'Stylization', 'Detail Enhance', 'Color Map'], default_value='None', key='-FILTER-')],
+            [sg.Button('Apply Filter', size=(20,1))]
+        ], pad=(10,10))],
+        [sg.Frame('Selection Tools', [
+            [sg.Text('Selection Shape:')],
+            [sg.Radio('Rectangle', 'SHAPE', default=True, key='-RECT-')],
+            [sg.Radio('Circle', 'SHAPE', key='-CIRCLE-')],
+            [sg.Radio('Freehand', 'SHAPE', key='-FREEHAND-')],
+            [sg.Text('Brush Size')],
+            [sg.Slider(range=(1,20), default_value=5, orientation='h', size=(20,20), key='-BRUSH-')],
+            [sg.Button('Clear Selection', size=(20,1))]
+        ], pad=(10,10))]
+    ], element_justification='left', scrollable=True, vertical_scroll_only=True, size=(300, 600))
+
+    # Layout adjustment: Canvas on the left, adjustments on the right
+    layout = [
+        top_buttons,
+        [
+            sg.Column([[graph]], element_justification='center'),
+            sg.VerticalSeparator(),
+            left_column
+        ]
+    ]
+
+    window = sg.Window('Image Editor', layout, finalize=True, resizable=True)
 
     # Draw the initial image at the correct location
     graph.draw_image(data=image_data, location=(0, 0))
@@ -378,6 +545,38 @@ def display_image(np_image):
         event, values = window.read()
         if event == sg.WINDOW_CLOSED or event == 'Exit':
             break
+        elif event == 'Load Image':
+            # Load a new image
+            filename = sg.popup_get_file('Select an image file', file_types=(("Image Files", "*.png;*.jpg;*.jpeg"),))
+            if filename:
+                image = cv2.imread(filename)
+                if image is None:
+                    sg.popup('Failed to load image.')
+                    continue
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                # Store the original image
+                original_image = image.copy()
+                if image.shape[1] > 800 or image.shape[0] > 600:
+                    image = cv2.resize(image, (800,600), interpolation=cv2.INTER_LINEAR)
+                edited_image = image.copy()
+                history = [edited_image.copy()]
+                selection_mask = None
+                height, width, _ = image.shape
+                graph.change_coordinates((0, height), (width, 0))
+                graph.Widget.config(width=width, height=height)
+                image_data = np_im_to_data(edited_image)
+                graph.erase()
+                graph.draw_image(data=image_data, location=(0, 0))
+                # Reset sliders and selection
+                window['-BRIGHTNESS-'].update(0)
+                window['-CONTRAST-'].update(0)
+                window['-SHARPEN-'].update(1)
+                window['-BLUR-'].update(0)
+                window['-TEMP-'].update(0)
+                window['-NOISE-'].update(0)
+                window['-FILTER-'].update('None')
+            else:
+                sg.popup('No file selected.')
         elif event == '-IMAGE-':
             x, y = values['-IMAGE-']
             if x is not None and y is not None:
@@ -445,6 +644,7 @@ def display_image(np_image):
                 sharpen_amount = values['-SHARPEN-']
                 blur_amount = values['-BLUR-']
                 temp = values['-TEMP-']
+                noise_intensity = values['-NOISE-']
                 # Extract the selected area
                 selected_region = adjusted_area.copy()
                 selected_region[selection_mask == 0] = 0
@@ -457,6 +657,8 @@ def display_image(np_image):
                     selected_region = blur_image(selected_region, amount=blur_amount)
                 if temp != 0:
                     selected_region = adjust_color_temperature(selected_region, temp)
+                if noise_intensity > 0:
+                    selected_region = add_noise(selected_region, noise_intensity=noise_intensity)
                 # Combine the adjusted selected area with the rest of the image
                 adjusted_area[selection_mask != 0] = selected_region[selection_mask != 0]
                 edited_image = adjusted_area
@@ -468,6 +670,7 @@ def display_image(np_image):
                 sharpen_amount = values['-SHARPEN-']
                 blur_amount = values['-BLUR-']
                 temp = values['-TEMP-']
+                noise_intensity = values['-NOISE-']
                 # Apply adjustments
                 if brightness != 0 or contrast != 0:
                     edited_image = adjust_brightness_contrast(edited_image, brightness, contrast)
@@ -477,6 +680,8 @@ def display_image(np_image):
                     edited_image = blur_image(edited_image, amount=blur_amount)
                 if temp != 0:
                     edited_image = adjust_color_temperature(edited_image, temp)
+                if noise_intensity > 0:
+                    edited_image = add_noise(edited_image, noise_intensity=noise_intensity)
             image_data = np_im_to_data(edited_image)
             graph.erase()
             graph.draw_image(data=image_data, location=(0, 0))
@@ -511,15 +716,13 @@ def display_image(np_image):
             selection_mask = None
         elif event == 'Object Removal':
             if selection_mask is not None:
-                # Apply object removal to the last image in history
                 edited_image = history[-1].copy()
-                # Save current state for undo
-                history.append(edited_image.copy())
+                # Call the updated remove_object function
                 edited_image = remove_object(edited_image, selection_mask)
+                history.append(edited_image.copy())
                 image_data = np_im_to_data(edited_image)
                 graph.erase()
                 graph.draw_image(data=image_data, location=(0, 0))
-                # Reset selection mask
                 selection_mask = None
             else:
                 sg.popup('Please select an area to remove.')
@@ -561,6 +764,7 @@ def display_image(np_image):
             window['-SHARPEN-'].update(1)
             window['-BLUR-'].update(0)
             window['-TEMP-'].update(0)
+            window['-NOISE-'].update(0)
             window['-FILTER-'].update('None')
             selection_mask = None
         elif event == 'Save Image':
