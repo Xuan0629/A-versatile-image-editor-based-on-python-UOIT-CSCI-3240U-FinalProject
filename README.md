@@ -1,4 +1,4 @@
-#**A Versatile Image Editor Based on Python**  
+#A Versatile Image Editor Based on Python
 **UOIT CSCI 3240U Final Project**  
 **By Xuan Zheng and Justin Marsh**  
 
