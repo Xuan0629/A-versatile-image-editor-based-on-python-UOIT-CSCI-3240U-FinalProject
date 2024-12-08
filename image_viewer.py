@@ -522,7 +522,7 @@ def display_image(np_image):
         ], pad=(10,10))]
     ], element_justification='left', scrollable=True, vertical_scroll_only=True, expand_y=True)
 
-    # Layout adjustment: Canvas on the left, adjustments on the right
+    # Canvas on the left, adjustments on the right
     layout = [
         top_buttons,
         [
@@ -561,8 +561,8 @@ def display_image(np_image):
                 graph.draw_image(data=image_data, location=(0, 0))
                 # Adjust window size
                 window_size = window.size
-                new_window_height = max(height + 100, window_size[1])  # Adding some padding
-                new_window_width = width + 350  # Assuming left_column width is about 350
+                new_window_height = max(height + 100, window_size[1])  
+                new_window_width = width + 350  
                 window.size = (new_window_width, new_window_height)
         elif event == 'Load Image':
             # Load a new image
