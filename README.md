@@ -79,7 +79,7 @@ Note: If you want to use the Load Image function to load the image you want. Ple
    - To test multiple filters, reset the image using "Reset Image" and repeat the process.
 
 6. **Panorama Creation:**  
-   - Click "Panorama" and use the file dialogue to select at least two images (e.g., `IMG_LEFT_BOX.jpeg` and `IMG_RIGHT_BOX.jpeg`).  
+   - Click "Panorama" and use the file dialogue to select (hold ctrl to select multiple files) at least two images (e.g., `IMG_LEFT_BOX.jpeg` and `IMG_RIGHT_BOX.jpeg`).  
    - The system will attempt to stitch the images into a single panorama.  
    - If successful, the panorama will display, and you can save it by clicking "Save Panorama."
 
